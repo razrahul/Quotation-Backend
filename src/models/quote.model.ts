@@ -1,54 +1,116 @@
-// src/models/quote.model.ts
 import { DataTypes, Model, Optional } from "sequelize";
 import sequelize from "../config/dbConnect";
+import { QuotePayload } from "../types/quotePayload";
 
-interface QuoteAttributes {
+export type QuoteStatus = "DRAFT" | "FINAL";
+
+export interface QuoteAttributes {
   id: number;
   userId?: number | null;
-  title: string;
-  payload: any; // parsed object in JS
+  quoteNo: string;
+  quoteDate: Date;
+  status: QuoteStatus;
+  currency: string;
+  totalAmount: string; // ⚠️ DECIMAL → string
+  payload: QuotePayload;
   createdAt?: Date;
   updatedAt?: Date;
 }
 
-interface QuoteCreationAttributes extends Optional<QuoteAttributes, "id"> {}
+export interface QuoteCreationAttributes
+  extends Optional<
+    QuoteAttributes,
+    "id" | "userId" | "status" | "createdAt" | "updatedAt"
+  > {}
 
-export class Quote extends Model<QuoteAttributes, QuoteCreationAttributes> implements QuoteAttributes {
+export class Quote
+  extends Model<QuoteAttributes, QuoteCreationAttributes>
+  implements QuoteAttributes
+{
   public id!: number;
-  public userId?: number | null;
-  public title!: string;
-  public payload!: any;
+  public userId!: number | null;
+  public quoteNo!: string;
+  public quoteDate!: Date;
+  public status!: QuoteStatus;
+  public currency!: string;
+  public totalAmount!: string;
+  public payload!: QuotePayload;
+
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
 
 Quote.init(
   {
-    id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
-    userId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
-    title: { type: DataTypes.STRING(255), allowNull: false },
-    // Use TEXT if DB doesn't support JSON; getter/setter handle conversion
+    id: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      primaryKey: true,
+      autoIncrement: true,
+    },
+
+    userId: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: true,
+      references: {
+        model: "usersQuotes",
+        key: "id",
+      },
+      onDelete: "SET NULL",
+    },
+
+    quoteNo: {
+      type: DataTypes.STRING(50),
+      allowNull: false,
+      unique: true,
+      defaultValue: DataTypes.UUIDV4,
+    },
+
+    quoteDate: {
+      type: DataTypes.DATEONLY, // 👈 only date (no time)
+      allowNull: false,
+    },
+
+    status: {
+      type: DataTypes.ENUM("DRAFT", "FINAL"),
+      defaultValue: "DRAFT",
+    },
+
+    currency: {
+      type: DataTypes.STRING(10),
+      defaultValue: "INR",
+    },
+
+    totalAmount: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: false,
+      defaultValue: 0,
+    },
+
     payload: {
-      type: DataTypes.TEXT('long'),
+      type: DataTypes.JSON,
       allowNull: false,
       get() {
-        const raw = this.getDataValue('payload') as string;
-        try {
-          return raw ? JSON.parse(raw) : null;
-        } catch (e) {
-          return raw;
+        const raw = this.getDataValue("payload");
+        if (typeof raw === "string") {
+          try {
+            return JSON.parse(raw);
+          } catch {
+            return raw;
+          }
         }
+        return raw;
       },
-      set(val: any) {
-        // accept object or string
-        this.setDataValue('payload', typeof val === 'string' ? val : JSON.stringify(val));
-      }
-    }
+    },
   },
   {
     sequelize,
     tableName: "quotes",
-    timestamps: true
+    timestamps: true,
+    indexes: [
+      { fields: ["userId"] },
+      { fields: ["status"] },
+      { fields: ["createdAt"] },
+    ],
   }
 );
 

@@ -1,219 +1,173 @@
-// src/controllers/quote.controller.ts
 import { Request, Response } from "express";
-import { Quote } from "../models";
+import { Quote } from "../models/quote.model";
+import { AuthRequest } from "../middleware/auth.middleware";
 import {
   renderQuoteHtml,
   generatePdfBufferFromHtml,
 } from "../services/pdf.service";
-import { AuthRequest } from "../middleware/auth.middleware";
 import DownloadLog from "../models/download.model";
 import { success, error } from "../utils/response";
+import { QuotePayload } from "../types/quotePayload";
 
+/* ===============================
+   Helpers
+================================ */
 
-// ===============================
-// Create Public Quote (No Login)
-// ===============================
+// Backend-side total calculation (NEVER trust frontend)
+function calculateTotals(payload: QuotePayload) {
+  const subTotal = payload.items.reduce((sum, i) => sum + i.qty * i.rate, 0);
+
+  const gstAmount = payload.gst ? (subTotal * payload.gst.percentage) / 100 : 0;
+
+  const discountAmount = payload.discount?.amount ?? 0;
+
+  const grandTotal = subTotal + gstAmount - discountAmount;
+
+  return {
+    subTotal,
+    grandTotal,
+  };
+}
+
+/* ===============================
+   Create Public Quote (Guest)
+================================ */
 export async function createQuote(req: Request, res: Response) {
   try {
-    const { title, data } = req.body;
-    if (!title || !data) return error(res, "Title and data are required", 400);
+    const { quoteNo, quoteDate, payload } = req.body;
 
-    // If client accidentally sent data as string, parse it.
-    const payload = typeof data === "string" ? JSON.parse(data) : data;
+    if (!quoteNo) {
+      return error(res, "Quotation number is required", 400);
+    }
 
-    const q = await Quote.create({ title, payload, userId: null });
-    return success(res, "Quote created successfully", q, 201);
+    if (!quoteDate) {
+      return error(res, "Quotation date is required", 400);
+    }
+
+    if (!payload || !payload.items?.length) {
+      return error(res, "Invalid quote payload", 400);
+    }
+
+    const { grandTotal } = calculateTotals(payload);
+
+    const quote = await Quote.create({
+      quoteNo,
+      quoteDate, // 👈 USER PROVIDED DATE
+      status: "DRAFT",
+      currency: "INR",
+      totalAmount: String(grandTotal),
+      payload,
+      userId: null,
+    });
+
+    return success(res, "Quote created", quote, 201);
   } catch (err: any) {
+    if (err.name === "SequelizeUniqueConstraintError") {
+      return error(res, "Quotation number already exists", 409);
+    }
     return error(res, err.message, 500);
   }
 }
 
-// ===============================
-// Get Quote (Public)
-// ===============================
-// src/controllers/quote.controller.ts (getQuote snippet)
+/* ===============================
+   Get Quote (Public Preview)
+================================ */
 export async function getQuote(req: Request, res: Response) {
   try {
-    const id = Number(req.params.id);
-    const q = await Quote.findByPk(id);
+    const quote = await Quote.findByPk(Number(req.params.id));
+    if (!quote) return error(res, "Quote not found", 404);
 
-    if (!q) return error(res, "Quote not found", 404);
-
-    // ensure payload is object
-    const quoteObj = q.toJSON ? q.toJSON() : { ...q };
-    if (typeof quoteObj.payload === "string") {
-      try {
-        quoteObj.payload = JSON.parse(quoteObj.payload);
-      } catch (e) {
-        // leave as-is if parse fails
-      }
+    const data = quote.toJSON();
+    
+    if (typeof data.payload === "string") {
+      data.payload = JSON.parse(data.payload);
     }
 
-    return success(res, "Quote fetched successfully", quoteObj);
+    return success(res, "Quote fetched", quote);
   } catch (err: any) {
     return error(res, err.message, 500);
   }
 }
 
-// =============================================
-// Save Quote (Requires Login)
-// -- userId assigned to quote
-// =============================================
+/* ===============================
+   Save Quote (Login required)
+================================ */
 export async function saveQuoteForUser(req: AuthRequest, res: Response) {
   try {
-    const uid = req.userId;
-    if (!uid) return error(res, "Login required", 401);
+    if (!req.userId) return error(res, "Login required", 401);
 
-    const { id } = req.params;
-    const quote = await Quote.findByPk(Number(id));
+    const quote = await Quote.findByPk(Number(req.params.id));
     if (!quote) return error(res, "Quote not found", 404);
 
-    // If already saved to same user, we still return success (idempotent)
-    if (quote.userId === uid) {
-      // noop
-    } else {
-      quote.userId = uid;
-      await quote.save();
+    if (quote.userId && quote.userId !== req.userId) {
+      return error(res, "Access denied", 403);
     }
 
-    // safe toJSON and ensure payload is object
-    const quoteObj: any = quote.toJSON ? quote.toJSON() : { ...quote };
-    if (typeof quoteObj.payload === "string") {
-      try {
-        quoteObj.payload = JSON.parse(quoteObj.payload as string);
-      } catch (err) {
-        // parsing failed — leave as-is or set to empty object
-        quoteObj.payload = quoteObj.payload;
-      }
-    }
+    quote.userId = req.userId;
+    await quote.save();
 
-    return success(res, "Quote saved to your account", quoteObj);
+    return success(res, "Quote saved to account", quote);
   } catch (err: any) {
     return error(res, err.message, 500);
   }
 }
 
-// =============================================
-// Download Quote (Requires Login)
-// - If quote.userId == null → assign to user
-// - If quote belongs to another user → block
-// =============================================
+/* ===============================
+   Download Quote (FINAL)
+================================ */
 export async function downloadQuote(req: AuthRequest, res: Response) {
   try {
-    const uid = req.userId;
-    if (!uid) return error(res, "Login required", 401);
+    if (!req.userId) return error(res, "Login required", 401);
 
-    const id = Number(req.params.id);
-    if (!id || Number.isNaN(id)) return error(res, "Invalid quote id", 400);
-
-    // Atomically claim the quote if unowned to avoid race conditions
-    const [affectedRows] = await Quote.update(
-      { userId: uid },
-      { where: { id, userId: null } }
-    );
-
-    // Fetch the fresh record
-    const quote = await Quote.findByPk(id);
+    const quote = await Quote.findByPk(Number(req.params.id));
     if (!quote) return error(res, "Quote not found", 404);
 
-    // If we didn't claim it just now, ensure it belongs to current user
-    if (affectedRows === 0 && quote.userId !== uid) {
+    if (quote.userId && quote.userId !== req.userId) {
       return error(res, "This quote does not belong to you", 403);
     }
 
-    // Ensure payload is a JS object for the template
-    let payloadObj: any;
-    const rawPayload = (quote as any).payload;
-    if (typeof rawPayload === "string") {
-      try {
-        payloadObj = JSON.parse(rawPayload);
-      } catch {
-        payloadObj = { raw: rawPayload };
-      }
-    } else {
-      payloadObj = rawPayload ?? {};
+    // Claim quote if guest
+    if (!quote.userId) {
+      quote.userId = req.userId;
     }
 
-    // Render HTML and create PDF buffer
-    const html = renderQuoteHtml(quote.title, payloadObj);
+    quote.status = "FINAL";
+    await quote.save();
 
-    let pdfBuffer: Buffer;
-    try {
-      pdfBuffer = await generatePdfBufferFromHtml(html);
-    } catch (pdfErr: any) {
-      console.error("PDF generation failed:", pdfErr);
-      return error(
-        res,
-        "Failed to generate PDF",
-        500,
-        pdfErr?.message || pdfErr
-      );
-    }
+    const html = renderQuoteHtml(quote);
+    const pdfBuffer = await generatePdfBufferFromHtml(html);
 
-    // Log download (best-effort)
-    try {
-      await DownloadLog.create({
-        quoteId: quote.id,
-        userId: uid,
-        downloadedAt: new Date(),
-      });
-    } catch (logErr) {
-      console.warn("Download log error (ignored):", logErr);
-    }
+    await DownloadLog.create({
+      quoteId: quote.id,
+      userId: req.userId,
+      downloadedAt: new Date(),
+    });
 
-    // Send PDF with correct headers (browser will download)
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename="quote-${quote.id}.pdf"`
+      `attachment; filename="${quote.quoteNo}.pdf"`
     );
-    res.setHeader(
-      "Cache-Control",
-      "no-store, no-cache, must-revalidate, proxy-revalidate"
-    );
-    res.setHeader("Pragma", "no-cache");
-    res.setHeader("Expires", "0");
 
     return res.send(pdfBuffer);
-  } catch (err: any) {
-    console.error("downloadQuote unexpected error:", err);
-    return error(res, err.message || "Server error", 500);
-  }
-}
-
-// =============================================
-// User Dashboard: List User Quotes
-// =============================================
-export async function userQuotesList(req: AuthRequest, res: Response) {
-  try {
-    const uid = req.userId;
-    if (!uid) return error(res, "Login required", 401);
-
-    const quotes = await Quote.findAll({
-      where: { userId: uid },
-      order: [["createdAt", "DESC"]],
-    });
-
-    return success(res, "Quotes fetched successfully", quotes);
   } catch (err: any) {
     return error(res, err.message, 500);
   }
 }
 
-// =============================================
-// User Dashboard: Download History
-// =============================================
-export async function userDownloadHistory(req: AuthRequest, res: Response) {
+/* ===============================
+   User Dashboard
+================================ */
+export async function userQuotesList(req: AuthRequest, res: Response) {
   try {
-    const uid = req.userId;
-    if (!uid) return error(res, "Login required", 401);
+    if (!req.userId) return error(res, "Login required", 401);
 
-    const logs = await DownloadLog.findAll({
-      where: { userId: uid },
-      order: [["downloadedAt", "DESC"]],
+    const quotes = await Quote.findAll({
+      where: { userId: req.userId },
+      order: [["createdAt", "DESC"]],
     });
 
-    return success(res, "Download history fetched successfully", logs);
+    return success(res, "Quotes fetched", quotes);
   } catch (err: any) {
     return error(res, err.message, 500);
   }

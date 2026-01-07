@@ -6,7 +6,6 @@ import {
   saveQuoteForUser,
   downloadQuote,
   userQuotesList,
-  userDownloadHistory
 } from "../controllers/quote.controller";
 import { requireAuth } from "../middleware/auth.middleware";
 
@@ -19,6 +18,5 @@ router.get("/:id/download", requireAuth, downloadQuote); // protected download
 
 // dashboard endpoints
 router.get("/user/me/list", requireAuth, userQuotesList);
-router.get("/user/me/downloads", requireAuth, userDownloadHistory);
 
 export default router;
