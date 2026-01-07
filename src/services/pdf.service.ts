@@ -15,7 +15,7 @@ export async function generatePdfBufferFromHtml(html: string): Promise<Buffer> {
     browser = await puppeteer.launch({
       headless: true,
       args: DEFAULT_ARGS,
-      timeout: 60000
+      timeout: 60000,
     });
 
     const page = await browser.newPage();
@@ -27,75 +27,131 @@ export async function generatePdfBufferFromHtml(html: string): Promise<Buffer> {
     const pdfData = await page.pdf({
       format: "A4",
       printBackground: true,
-      margin: { top: "20mm", right: "15mm", bottom: "20mm", left: "15mm" }
+      margin: { top: "20mm", right: "15mm", bottom: "20mm", left: "15mm" },
     });
 
     const buffer = Buffer.from(pdfData); // convert to Node Buffer
     return buffer;
-
   } finally {
     if (browser) {
-      try { await browser.close(); } catch (_) {}
+      try {
+        await browser.close();
+      } catch (_) {}
     }
   }
 }
 
+// export function renderQuoteHtml(title: string, data: any) {
+//   // defensive parse if data is still string
+//   let bodyData: any;
+//   if (typeof data === "string") {
+//     try {
+//       bodyData = JSON.parse(data);
+//     } catch {
+//       bodyData = { raw: data };
+//     }
+//   } else {
+//     bodyData = data || {};
+//   }
 
-export function renderQuoteHtml(title: string, data: any) {
-  // defensive parse if data is still string
-  let bodyData: any;
-  if (typeof data === "string") {
-    try {
-      bodyData = JSON.parse(data);
-    } catch {
-      bodyData = { raw: data };
-    }
-  } else {
-    bodyData = data || {};
-  }
+//   const items = Array.isArray(bodyData.items) ? bodyData.items : [];
+//   const itemsHtml = items
+//     .map(
+//       (it: any) => `<tr>
+//     <td>${escapeHtml(String(it.desc ?? ""))}</td>
+//     <td style="text-align:center">${escapeHtml(String(it.qty ?? ""))}</td>
+//     <td style="text-align:right">${escapeHtml(String(it.price ?? ""))}</td>
+//   </tr>`
+//     )
+//     .join("");
 
-  const items = Array.isArray(bodyData.items) ? bodyData.items : [];
-  const itemsHtml = items
+//   const total = items.reduce(
+//     (s: number, it: any) => s + Number(it.qty || 0) * Number(it.price || 0),
+//     0
+//   );
+
+//   return `<!doctype html>
+//   <html>
+//     <head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+//       <style>
+//         body{font-family:Arial;padding:24px;color:#111;font-size:14px}
+//         h1{text-align:center}
+//         .meta{color:#666;text-align:center;margin-bottom:16px}
+//         table{width:100%;border-collapse:collapse;margin-top:16px}
+//         th,td{border:1px solid #eee;padding:10px}
+//         thead th{background:#f7f7f7;text-align:left}
+//         .right{text-align:right}
+//         tfoot td{font-weight:700}
+//       </style>
+//     </head>
+//     <body>
+//       <h1>${escapeHtml(title || "Quotation")}</h1>
+//       <div class="meta">Generated: ${new Date().toLocaleString()}</div>
+//       <table>
+//         <thead>
+//           <tr><th>Description</th><th style="width:80px;text-align:center">Qty</th><th style="width:120px;text-align:right">Price</th></tr>
+//         </thead>
+//         <tbody>${itemsHtml}</tbody>
+//         <tfoot><tr><td colspan="2">Total</td><td class="right">${total}</td></tr></tfoot>
+//       </table>
+//     </body>
+//   </html>`;
+// }
+
+export function renderQuoteHtml(quote: any) {
+  const p = quote.payload;
+  const items = p.items || [];
+
+  const rows = items
     .map(
-      (it: any) => `<tr>
-    <td>${escapeHtml(String(it.desc ?? ""))}</td>
-    <td style="text-align:center">${escapeHtml(String(it.qty ?? ""))}</td>
-    <td style="text-align:right">${escapeHtml(String(it.price ?? ""))}</td>
-  </tr>`
+      (i: any) => `
+    <tr>
+      <td>${escapeHtml(i.name)}</td>
+      <td align="center">${i.qty}</td>
+      <td align="right">${i.rate}</td>
+      <td align="right">${i.qty * i.rate}</td>
+    </tr>`
     )
     .join("");
 
-  const total = items.reduce(
-    (s: number, it: any) => s + Number(it.qty || 0) * Number(it.price || 0),
-    0
-  );
-
-  return `<!doctype html>
+  return `
   <html>
-    <head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-      <style>
-        body{font-family:Arial;padding:24px;color:#111;font-size:14px}
-        h1{text-align:center}
-        .meta{color:#666;text-align:center;margin-bottom:16px}
-        table{width:100%;border-collapse:collapse;margin-top:16px}
-        th,td{border:1px solid #eee;padding:10px}
-        thead th{background:#f7f7f7;text-align:left}
-        .right{text-align:right}
-        tfoot td{font-weight:700}
-      </style>
-    </head>
-    <body>
-      <h1>${escapeHtml(title || "Quotation")}</h1>
-      <div class="meta">Generated: ${new Date().toLocaleString()}</div>
-      <table>
-        <thead>
-          <tr><th>Description</th><th style="width:80px;text-align:center">Qty</th><th style="width:120px;text-align:right">Price</th></tr>
-        </thead>
-        <tbody>${itemsHtml}</tbody>
-        <tfoot><tr><td colspan="2">Total</td><td class="right">${total}</td></tr></tfoot>
-      </table>
-    </body>
-  </html>`;
+  <head>
+    <style>
+      body { font-family: Arial; font-size: 14px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 20px }
+      th, td { border: 1px solid #ddd; padding: 8px }
+      th { background: #f5f5f5 }
+      .right { text-align: right }
+    </style>
+  </head>
+  <body>
+    <h2>Quotation</h2>
+    <p><b>Quote No:</b> ${quote.quoteNo}</p>
+
+    <h4>Client</h4>
+    <p>${p.client.name}</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Qty</th>
+          <th>Rate</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+      <tfoot>
+        <tr>
+          <td colspan="3" class="right"><b>Grand Total</b></td>
+          <td class="right"><b>${quote.totalAmount}</b></td>
+        </tr>
+      </tfoot>
+    </table>
+  </body>
+  </html>
+  `;
 }
 
 function escapeHtml(s: string) {

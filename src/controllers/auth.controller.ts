@@ -15,7 +15,7 @@ function createToken(userId: number) {
 
 export async function register(req: Request, res: Response) {
   try {
-    const { name, email, password } = req.body;
+    const { name, country, email, password } = req.body;
 
     if (!email || !password) return error(res, "Email and password required", 400);
 
@@ -23,7 +23,12 @@ export async function register(req: Request, res: Response) {
     if (existing) return error(res, "Email already registered", 400);
 
     const hash = await bcrypt.hash(password, 10);
-    const user = await User.create({ name, email, password: hash });
+    const user = await User.create({ 
+      name, 
+      email, 
+      password: hash,
+      ...(typeof country === "string" && country.trim() && { country: country.trim() }) 
+    });
 
     const token = createToken(user.id);
 
@@ -36,7 +41,7 @@ export async function register(req: Request, res: Response) {
     });
 
     return success(res, "User registered successfully", {
-      user: { id: user.id, name: user.name, email: user.email },
+      user: { id: user.id, name: user.name, email: user.email, country: user.country },
       token
     }, 201);
   } catch (err: any) {
@@ -65,7 +70,7 @@ export async function login(req: Request, res: Response) {
     });
 
     return success(res, "Logged in successfully", {
-      user: { id: user.id, name: user.name, email: user.email },
+      user: { id: user.id, name: user.name, email: user.email, country: user.country },
       token
     },
     201);
@@ -85,7 +90,7 @@ export async function profile(req: Request, res: Response) {
     const userId = authReq.userId;
     if (!userId) return error(res, "Unauthorized", 401);
 
-    const user = await User.findByPk(userId, { attributes: ["id", "name", "email", "createdAt"] });
+    const user = await User.findByPk(userId, { attributes: ["id", "name", "email","country", "createdAt"] });
     return success(res, "Profile fetched", user, 200);
   } catch (err: any) {
     return error(res, err.message || "Failed to fetch profile", 500);
