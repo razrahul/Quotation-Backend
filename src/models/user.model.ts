@@ -48,6 +48,8 @@ User.init(
     sequelize,
     tableName: "usersQuotes",
     timestamps: true,
+    paranoid: true, // 👈 soft delete ON
+    deletedAt: "deletedAt", // optional but clear
   }
 );
 
