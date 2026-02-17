@@ -172,3 +172,43 @@ export async function userQuotesList(req: AuthRequest, res: Response) {
     return error(res, err.message, 500);
   }
 }
+
+
+export async function finalizeQuote(req: AuthRequest, res: Response) {
+  try {
+    if (!req.userId) return error(res, "Login required", 401);
+
+    const { quoteNo, quoteDate, payload } = req.body;
+
+    const { grandTotal } = calculateTotals(payload);
+
+    const quote = await Quote.create({
+      quoteNo,
+      quoteDate,
+      status: "FINAL",
+      currency: "INR",
+      totalAmount: String(grandTotal),
+      payload,
+      userId: req.userId,
+    });
+
+    const html = renderQuoteHtml(quote);
+    const pdfBuffer = await generatePdfBufferFromHtml(html);
+
+    await DownloadLog.create({
+      quoteId: quote.id,
+      userId: req.userId,
+      downloadedAt: new Date(),
+    });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${quote.quoteNo}.pdf"`
+    );
+
+    return res.send(pdfBuffer);
+  } catch (err: any) {
+    return error(res, err.message, 500);
+  }
+}
