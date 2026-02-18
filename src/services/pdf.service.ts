@@ -104,13 +104,15 @@ export function renderQuoteHtml(quote: any) {
 
   const rows = items
     .map(
-      (i: any) => `
-    <tr>
-      <td>${escapeHtml(i.name)}</td>
-      <td align="center">${i.qty}</td>
-      <td align="right">${i.rate}</td>
-      <td align="right">${i.qty * i.rate}</td>
-    </tr>`
+      (i: any, index: number) => `
+      <tr>
+        <td class="center">${index + 1}</td>
+        <td>${escapeHtml(i.name)}</td>
+        <td class="center">${i.qty}</td>
+        <td class="center">${escapeHtml(i.unit || "")}</td>
+        <td class="right">₹ ${i.rate}</td>
+        <td class="right">₹ ${i.amount}</td>
+      </tr>`
     )
     .join("");
 
@@ -118,37 +120,189 @@ export function renderQuoteHtml(quote: any) {
   <html>
   <head>
     <style>
-      body { font-family: Arial; font-size: 14px; }
-      table { width: 100%; border-collapse: collapse; margin-top: 20px }
-      th, td { border: 1px solid #ddd; padding: 8px }
-      th { background: #f5f5f5 }
-      .right { text-align: right }
+      body {
+        font-family: "Segoe UI", Arial, sans-serif;
+        font-size: 14px;
+        color: #0f172a;
+        padding: 20px 25px; /* more left-right spacing */
+      }
+
+      .container {
+        width: 100%;
+      }
+
+      /* ===== HEADER ===== */
+      .header {
+        margin-bottom: 30px;
+      }
+
+      .title {
+        font-size: 26px;
+        font-weight: 700;
+        color: #1d4f7a;
+      }
+
+      .info {
+        margin-top: 6px;
+        color: #334155;
+      }
+
+      /* ===== PARTY GRID ===== */
+      .party-grid {
+        display: flex;
+        gap: 25px;
+        margin: 30px 0;
+      }
+
+      .party-card {
+        flex: 1;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 16px;
+        background: #fafafa;
+      }
+
+      .party-card h4 {
+        margin-bottom: 8px;
+        color: #1d4f7a;
+        font-size: 15px;
+      }
+
+      .party-card p {
+        margin: 2px 0;
+        line-height: 1.4;
+      }
+
+      /* ===== TABLE ===== */
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+      }
+
+      th {
+        background: #1d4f7a;
+        color: white;
+        padding: 10px 8px;
+        text-align: left;
+        font-size: 13px;
+      }
+
+      td {
+        border: 1px solid #e5e7eb; /* only bottom border */
+        padding: 9px 8px;
+        font-size: 13px;
+      }
+
+      tr:nth-child(even) td {
+        background: #f8fafc;
+      }
+
+      .center {
+        text-align: center;
+      }
+
+      .right {
+        text-align: right;
+      }
+
+      /* ===== SUMMARY ===== */
+      .summary {
+        margin-top: 35px; /* more gap from table */
+        width: 260px;
+        margin-left: auto;
+      }
+
+      .summary-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 7px 0;
+        font-size: 14px;
+      }
+
+      .summary-row.total {
+        border-top: 2px solid #111;
+        margin-top: 10px;
+        padding-top: 12px;
+        font-weight: 700;
+        font-size: 16px;
+      }
+
+
+      /* ===== FOOTER SPACE ===== */
+      .spacer {
+        height: 20px;
+      }
     </style>
   </head>
   <body>
-    <h2>Quotation</h2>
-    <p><b>Quote No:</b> ${quote.quoteNo}</p>
+    <div class="container">
 
-    <h4>Client</h4>
-    <p>${p.client.name}</p>
+      <div class="header">
+        <div class="title">Quotation</div>
+        <div class="info">No: ${quote.quoteNo}</div>
+        <div class="info">Date: ${quote.quoteDate}</div>
+      </div>
 
-    <table>
-      <thead>
-        <tr>
-          <th>Item</th>
-          <th>Qty</th>
-          <th>Rate</th>
-          <th>Total</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-      <tfoot>
-        <tr>
-          <td colspan="3" class="right"><b>Grand Total</b></td>
-          <td class="right"><b>${quote.totalAmount}</b></td>
-        </tr>
-      </tfoot>
-    </table>
+      <div class="party-grid">
+        <div class="party-card">
+          <h4>Your Details</h4>
+          <p><strong>${escapeHtml(p.company.name)}</strong></p>
+          <p>${escapeHtml(p.company.address || "")}</p>
+          <p>${escapeHtml(p.company.city || "")}, ${escapeHtml(p.company.state || "")}</p>
+          <p>${escapeHtml(p.company.phone || "")}</p>
+        </div>
+
+        <div class="party-card">
+          <h4>Client Details</h4>
+          <p><strong>${escapeHtml(p.client.name)}</strong></p>
+          <p>${escapeHtml(p.client.address || "")}</p>
+          <p>${escapeHtml(p.client.city || "")}, ${escapeHtml(p.client.state || "")}</p>
+          <p>${escapeHtml(p.client.phone || "")}</p>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="width:50px;">Sr.</th>
+            <th>Item</th>
+            <th style="width:80px;">Qty</th>
+            <th style="width:90px;">Unit</th>
+            <th style="width:100px;">Rate</th>
+            <th style="width:120px;">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>
+
+      <div class="summary">
+        <div class="summary-row">
+          <span>Sub Total</span>
+          <span>₹ ${p.subTotal}</span>
+        </div>
+
+        ${
+          p.gst
+            ? `
+          <div class="summary-row">
+            <span>GST (${p.gst.percentage}%)</span>
+            <span>₹ ${p.gst.amount}</span>
+          </div>
+        `
+            : ""
+        }
+
+        <div class="summary-row total">
+          <span>Total</span>
+          <span>₹ ${p.grandTotal}</span>
+        </div>
+      </div>
+
+       <div class="spacer"></div>
+    </div>
   </body>
   </html>
   `;
