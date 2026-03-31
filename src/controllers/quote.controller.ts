@@ -5,60 +5,35 @@ import {
   renderQuoteHtml,
   generatePdfBufferFromHtml,
 } from "../services/pdf.service";
+import {
+  buildQuoteValues,
+  updateQuoteById,
+  validateQuoteInput,
+} from "../services/quote.service";
 import DownloadLog from "../models/download.model";
 import { success, error } from "../utils/response";
 import { QuotePayload } from "../types/quotePayload";
-
-/* ===============================
-   Helpers
-================================ */
-
-// Backend-side total calculation (NEVER trust frontend)
-function calculateTotals(payload: QuotePayload) {
-  const subTotal = payload.items.reduce((sum, i) => sum + i.qty * i.rate, 0);
-
-  const gstAmount = payload.gst ? (subTotal * payload.gst.percentage) / 100 : 0;
-
-  const discountAmount = payload.discount?.amount ?? 0;
-
-  const grandTotal = subTotal + gstAmount - discountAmount;
-
-  return {
-    subTotal,
-    grandTotal,
-  };
-}
 
 /* ===============================
    Create Public Quote (Guest)
 ================================ */
 export async function createQuote(req: Request, res: Response) {
   try {
-    const { quoteNo, quoteDate, payload } = req.body;
+    const { quoteName, quoteNo, quoteDate, payload } = req.body;
+    const validationError = validateQuoteInput({ quoteNo, quoteDate, payload });
 
-    if (!quoteNo) {
-      return error(res, "Quotation number is required", 400);
+    if (validationError) {
+      return error(res, validationError, 400);
     }
 
-    if (!quoteDate) {
-      return error(res, "Quotation date is required", 400);
-    }
-
-    if (!payload || !payload.items?.length) {
-      return error(res, "Invalid quote payload", 400);
-    }
-
-    const { grandTotal } = calculateTotals(payload);
-
-    const quote = await Quote.create({
-      quoteNo,
-      quoteDate, // 👈 USER PROVIDED DATE
-      status: "DRAFT",
-      currency: "INR",
-      totalAmount: String(grandTotal),
-      payload,
-      userId: null,
-    });
+    const quote = await Quote.create(
+      buildQuoteValues({
+        quoteName,
+        quoteNo,
+        quoteDate,
+        payload: payload as QuotePayload,
+      })
+    );
 
     return success(res, "Quote created", quote, 201);
   } catch (err: any) {
@@ -78,7 +53,7 @@ export async function getQuote(req: Request, res: Response) {
     if (!quote) return error(res, "Quote not found", 404);
 
     const data = quote.toJSON();
-    
+
     if (typeof data.payload === "string") {
       data.payload = JSON.parse(data.payload);
     }
@@ -126,7 +101,6 @@ export async function downloadQuote(req: AuthRequest, res: Response) {
       return error(res, "This quote does not belong to you", 403);
     }
 
-    // Claim quote if guest
     if (!quote.userId) {
       quote.userId = req.userId;
     }
@@ -173,26 +147,78 @@ export async function userQuotesList(req: AuthRequest, res: Response) {
   }
 }
 
+export async function updateQuote(req: AuthRequest, res: Response) {
+  try {
+    if (!req.userId) return error(res, "Login required", 401);
+
+    const quote = await Quote.findByPk(Number(req.params.id));
+    if (!quote) return error(res, "Quote not found", 404);
+
+    if (quote.userId && quote.userId !== req.userId) {
+      return error(res, "This quote does not belong to you", 403);
+    }
+
+    const { quoteName, quoteNo, quoteDate, payload } = req.body;
+    const validationError = validateQuoteInput({
+      quoteNo,
+      quoteDate,
+      payload,
+      requirePartyDetails: true,
+    });
+
+    if (validationError) {
+      return error(res, validationError, 400);
+    }
+
+    if (!quote.userId) {
+      quote.userId = req.userId;
+    }
+
+    const updatedQuote = await updateQuoteById({
+      quote,
+      quoteName,
+      quoteNo,
+      quoteDate,
+      payload: payload as QuotePayload,
+    });
+
+    return success(res, "Quote updated", updatedQuote);
+  } catch (err: any) {
+    if (err.name === "SequelizeUniqueConstraintError") {
+      return error(res, "Quotation number already exists", 409);
+    }
+    return error(res, err.message, 500);
+  }
+}
 
 export async function finalizeQuote(req: AuthRequest, res: Response) {
   try {
     if (!req.userId) return error(res, "Login required", 401);
 
-    const { quoteNo, quoteDate, payload } = req.body;
-
-    const { grandTotal } = calculateTotals(payload);
-
-    const quote = await Quote.create({
+    const { quoteName, quoteNo, quoteDate, payload } = req.body;
+    const validationError = validateQuoteInput({
       quoteNo,
       quoteDate,
-      status: "FINAL",
-      currency: "INR",
-      totalAmount: String(grandTotal),
       payload,
-      userId: req.userId,
+      requirePartyDetails: true,
     });
 
-    const html = renderQuoteHtml(quote);
+    if (validationError) {
+      return error(res, validationError, 400);
+    }
+
+    const quote = await Quote.create(
+      buildQuoteValues({
+        quoteName,
+        quoteNo,
+        quoteDate,
+        payload: payload as QuotePayload,
+        status: "FINAL",
+        userId: req.userId,
+      })
+    );
+
+    const html = await renderQuoteHtml(quote);
     const pdfBuffer = await generatePdfBufferFromHtml(html);
 
     await DownloadLog.create({
@@ -209,6 +235,9 @@ export async function finalizeQuote(req: AuthRequest, res: Response) {
 
     return res.send(pdfBuffer);
   } catch (err: any) {
+    if (err.name === "SequelizeUniqueConstraintError") {
+      return error(res, "Quotation number already exists", 409);
+    }
     return error(res, err.message, 500);
   }
 }

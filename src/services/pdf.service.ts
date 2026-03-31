@@ -239,7 +239,7 @@ export function renderQuoteHtml(quote: any) {
     <div class="container">
 
       <div class="header">
-        <div class="title">Quotation</div>
+        <div class="title">${quote.quoteName}</div>
         <div class="info">No: ${quote.quoteNo}</div>
         <div class="info">Date: ${quote.quoteDate}</div>
       </div>
