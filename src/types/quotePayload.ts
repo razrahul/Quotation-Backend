@@ -1,6 +1,5 @@
-/* ================= COMPANY ================= */
 export interface CompanyDetails {
-  name: string;                 // required
+  name: string;
   phone?: string;
   gstin?: string | null;
   address?: string;
@@ -9,9 +8,8 @@ export interface CompanyDetails {
   country?: string;
 }
 
-/* ================= CLIENT ================= */
 export interface ClientDetails {
-  name: string;                 // required
+  name: string;
   phone?: string;
   gstin?: string | null;
   address?: string;
@@ -20,45 +18,78 @@ export interface ClientDetails {
   country?: string;
 }
 
-/* ================= ITEM ================= */
 export interface QuoteItem {
-  name: string;                 // Item / Service name
-  qty: number;                  // Quantity
-  unit: string;                 // Nos / Service / Hrs
-  rate: number;                 // Per unit
-  amount: number;               // qty * rate
+  name: string;
+  qty: number;
+  unit: string;
+  rate: number;
+  amount: number;
 }
 
-/* ================= TAX ================= */
 export interface GstDetails {
-  percentage: number;           // 18
-  amount: number;               // calculated
+  percentage: number;
+  amount: number;
 }
 
-/* ================= DISCOUNT ================= */
 export interface DiscountDetails {
   type: "PERCENT" | "FLAT";
   value: number;
   amount: number;
 }
 
-/* ================= MAIN PAYLOAD ================= */
+export interface QuoteAssetPayload {
+  name?: string;
+  url?: string;
+  dataUrl?: string;
+  provider?: string;
+  publicId?: string;
+}
+
+export interface QuoteFieldPayload {
+  label: string;
+  value: string;
+}
+
+export interface QuoteDesignPayload {
+  accentColor?: string;
+  language?: string;
+  headingFont?: string;
+  bodyFont?: string;
+  headingFontSize?: number;
+  bodyFontSize?: number;
+  paperSize?: "A4" | "Letter";
+  marginPreset?: "compact" | "normal" | "wide";
+  textScale?: "small" | "normal" | "large";
+}
+
+export interface QuoteTaxConfigPayload {
+  taxType?: string;
+  placeOfSupply?: string;
+  gstMode?: "igst" | "cgst_sgst";
+  reverseCharge?: boolean;
+}
+
 export interface QuotePayload {
   company: CompanyDetails;
   client: ClientDetails;
   items: QuoteItem[];
-
-  gst?: GstDetails;
+  gst?: GstDetails | null;
   discount?: DiscountDetails;
-
   subTotal: number;
   grandTotal: number;
-
   terms?: string;
   notes?: string;
-
+  companyLogo?: QuoteAssetPayload | null;
+  signature?: QuoteAssetPayload | null;
+  headerFields?: QuoteFieldPayload[];
+  additionalFields?: QuoteFieldPayload[];
+  design?: QuoteDesignPayload;
+  taxConfig?: QuoteTaxConfigPayload;
   meta?: {
     quotationDate?: string;
     dueDate?: string;
+    validUntil?: string;
+    showTotalInWords?: boolean;
+    showTotalInWordsLabel?: string;
   };
 }

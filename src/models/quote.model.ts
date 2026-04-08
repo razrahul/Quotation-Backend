@@ -7,6 +7,7 @@ export type QuoteStatus = "DRAFT" | "FINAL";
 export interface QuoteAttributes {
   id: number;
   userId?: number | null;
+  quoteName?: string;
   quoteNo: string;
   quoteDate: Date;
   status: QuoteStatus;
@@ -29,6 +30,7 @@ export class Quote
 {
   public id!: number;
   public userId!: number | null;
+  public quoteName!: string;
   public quoteNo!: string;
   public quoteDate!: Date;
   public status!: QuoteStatus;
@@ -56,6 +58,12 @@ Quote.init(
         key: "id",
       },
       onDelete: "SET NULL",
+    },
+
+    quoteName: {
+      type: DataTypes.STRING(256),
+      allowNull: true,
+      defaultValue: "Quotation",
     },
 
     quoteNo: {

@@ -3,6 +3,7 @@
 import User from "../models/user.model";
 import Quote from "../models/quote.model";
 import { DownloadLog } from "../models";
+import QuoteAsset from "../models/quoteAsset.model";
 
 export async function tableSync() {
   
@@ -11,6 +12,7 @@ export async function tableSync() {
     await User.sync({ force: false }); //alter: true for new change in model
     await Quote.sync({ force: false }); //alter: true
     await DownloadLog.sync({ force: false }); //alter: true
+    await QuoteAsset.sync({ force: false }); //alter: true
   } catch (err: any) {
     console.error("[tableSync] error:", err.message || err);
     throw err;

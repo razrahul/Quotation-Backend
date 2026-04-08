@@ -6,7 +6,8 @@ import {
   saveQuoteForUser,
   downloadQuote,
   userQuotesList,
-  finalizeQuote
+  finalizeQuote,
+  updateQuote,
 } from "../controllers/quote.controller";
 import { requireAuth } from "../middleware/auth.middleware";
 
@@ -16,6 +17,7 @@ router.post("/", createQuote);             // create/preview public
 router.get("/:id", getQuote);              // preview
 router.post("/:id/save", requireAuth, saveQuoteForUser); // attach to user
 router.get("/:id/download", requireAuth, downloadQuote); // protected download
+router.put("/:id", requireAuth, updateQuote); // update existing quote
 
 //finalize quote
 router.post("/finalize", requireAuth, finalizeQuote);

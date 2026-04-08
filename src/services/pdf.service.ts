@@ -1,7 +1,5 @@
-// src/services/pdf.service.ts
 import * as puppeteer from "puppeteer";
 
-// safe args for headless chromium
 const DEFAULT_ARGS = [
   "--no-sandbox",
   "--disable-setuid-sandbox",
@@ -20,18 +18,16 @@ export async function generatePdfBufferFromHtml(html: string): Promise<Buffer> {
 
     const page = await browser.newPage();
     await page.setViewport({ width: 1200, height: 800 });
-
     await page.setContent(html, { waitUntil: "networkidle0", timeout: 60000 });
 
-    // pdf() returns Uint8Array in Puppeteer v21+
     const pdfData = await page.pdf({
       format: "A4",
       printBackground: true,
-      margin: { top: "20mm", right: "15mm", bottom: "20mm", left: "15mm" },
+      margin: { top: "0mm", right: "0mm", bottom: "0mm", left: "0mm" },
+      preferCSSPageSize: true,
     });
 
-    const buffer = Buffer.from(pdfData); // convert to Node Buffer
-    return buffer;
+    return Buffer.from(pdfData);
   } finally {
     if (browser) {
       try {
@@ -41,288 +37,503 @@ export async function generatePdfBufferFromHtml(html: string): Promise<Buffer> {
   }
 }
 
-// export function renderQuoteHtml(title: string, data: any) {
-//   // defensive parse if data is still string
-//   let bodyData: any;
-//   if (typeof data === "string") {
-//     try {
-//       bodyData = JSON.parse(data);
-//     } catch {
-//       bodyData = { raw: data };
-//     }
-//   } else {
-//     bodyData = data || {};
-//   }
+function numberToWords(value: number) {
+  const units = [
+    "",
+    "One",
+    "Two",
+    "Three",
+    "Four",
+    "Five",
+    "Six",
+    "Seven",
+    "Eight",
+    "Nine",
+    "Ten",
+    "Eleven",
+    "Twelve",
+    "Thirteen",
+    "Fourteen",
+    "Fifteen",
+    "Sixteen",
+    "Seventeen",
+    "Eighteen",
+    "Nineteen",
+  ];
+  const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
 
-//   const items = Array.isArray(bodyData.items) ? bodyData.items : [];
-//   const itemsHtml = items
-//     .map(
-//       (it: any) => `<tr>
-//     <td>${escapeHtml(String(it.desc ?? ""))}</td>
-//     <td style="text-align:center">${escapeHtml(String(it.qty ?? ""))}</td>
-//     <td style="text-align:right">${escapeHtml(String(it.price ?? ""))}</td>
-//   </tr>`
-//     )
-//     .join("");
+  const convertBelowThousand = (num: number): string => {
+    if (num < 20) return units[num];
+    if (num < 100) {
+      return `${tens[Math.floor(num / 10)]}${num % 10 ? ` ${units[num % 10]}` : ""}`;
+    }
+    return `${units[Math.floor(num / 100)]} Hundred${num % 100 ? ` ${convertBelowThousand(num % 100)}` : ""}`;
+  };
 
-//   const total = items.reduce(
-//     (s: number, it: any) => s + Number(it.qty || 0) * Number(it.price || 0),
-//     0
-//   );
+  if (value === 0) return "Zero Rupees Only";
 
-//   return `<!doctype html>
-//   <html>
-//     <head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-//       <style>
-//         body{font-family:Arial;padding:24px;color:#111;font-size:14px}
-//         h1{text-align:center}
-//         .meta{color:#666;text-align:center;margin-bottom:16px}
-//         table{width:100%;border-collapse:collapse;margin-top:16px}
-//         th,td{border:1px solid #eee;padding:10px}
-//         thead th{background:#f7f7f7;text-align:left}
-//         .right{text-align:right}
-//         tfoot td{font-weight:700}
-//       </style>
-//     </head>
-//     <body>
-//       <h1>${escapeHtml(title || "Quotation")}</h1>
-//       <div class="meta">Generated: ${new Date().toLocaleString()}</div>
-//       <table>
-//         <thead>
-//           <tr><th>Description</th><th style="width:80px;text-align:center">Qty</th><th style="width:120px;text-align:right">Price</th></tr>
-//         </thead>
-//         <tbody>${itemsHtml}</tbody>
-//         <tfoot><tr><td colspan="2">Total</td><td class="right">${total}</td></tr></tfoot>
-//       </table>
-//     </body>
-//   </html>`;
-// }
+  const parts: string[] = [];
+  const crore = Math.floor(value / 10000000);
+  const lakh = Math.floor((value % 10000000) / 100000);
+  const thousand = Math.floor((value % 100000) / 1000);
+  const hundred = value % 1000;
+
+  if (crore) parts.push(`${convertBelowThousand(crore)} Crore`);
+  if (lakh) parts.push(`${convertBelowThousand(lakh)} Lakh`);
+  if (thousand) parts.push(`${convertBelowThousand(thousand)} Thousand`);
+  if (hundred) parts.push(convertBelowThousand(hundred));
+
+  return `${parts.join(" ").trim()} Rupees Only`;
+}
 
 export function renderQuoteHtml(quote: any) {
-  const p = quote.payload;
+  const p = quote.payload || {};
   const items = p.items || [];
+  const accent = p.design?.accentColor || "#0f4c81";
+  const headingFont = p.design?.headingFont || "Open Sans";
+  const bodyFont = p.design?.bodyFont || "Open Sans";
+  const headingFontSize = p.design?.headingFontSize || 20;
+  const bodyFontSize = p.design?.bodyFontSize || 14;
+  const totalInWords =
+    p.meta?.showTotalInWordsLabel ||
+    numberToWords(Math.round(Number(p.grandTotal || 0)));
 
   const rows = items
     .map(
-      (i: any, index: number) => `
+      (item: any, index: number) => `
       <tr>
         <td class="center">${index + 1}</td>
-        <td>${escapeHtml(i.name)}</td>
-        <td class="center">${i.qty}</td>
-        <td class="center">${escapeHtml(i.unit || "")}</td>
-        <td class="right">₹ ${i.rate}</td>
-        <td class="right">₹ ${i.amount}</td>
+        <td>${escapeHtml(item.name)}</td>
+        <td class="center">${item.qty}</td>
+        <td class="center">${escapeHtml(item.unit || "")}</td>
+        <td class="right">Rs. ${item.rate}</td>
+        <td class="right">Rs. ${item.amount}</td>
       </tr>`
     )
     .join("");
 
+  const headerFields = (p.headerFields || [])
+    .map(
+      (field: any) => `
+      <div class="meta-row">
+        <span>${escapeHtml(field.label || "Field")}</span>
+        <strong>${escapeHtml(field.value || "-")}</strong>
+      </div>`
+    )
+    .join("");
+
+  const additionalFields = (p.additionalFields || [])
+    .map(
+      (field: any) => `
+      <div class="field-pair">
+        <span>${escapeHtml(field.label || "Field")}</span>
+        <strong>${escapeHtml(field.value || "-")}</strong>
+      </div>`
+    )
+    .join("");
+
+  const companyLogo = p.companyLogo?.url || p.companyLogo?.dataUrl;
+  const signature = p.signature?.url || p.signature?.dataUrl;
+
   return `
   <html>
-  <head>
-    <style>
-      body {
-        font-family: "Segoe UI", Arial, sans-serif;
-        font-size: 14px;
-        color: #0f172a;
-        padding: 20px 25px; /* more left-right spacing */
-      }
+    <head>
+      <style>
+        body {
+          font-family: "${bodyFont}", "Segoe UI", Arial, sans-serif;
+          font-size: ${bodyFontSize}px;
+          color: #0f172a;
+          padding: 0;
+          margin: 0;
+          background: #fff;
+        }
 
-      .container {
-        width: 100%;
-      }
+        @page {
+          size: A4;
+          margin: 0;
+        }
 
-      /* ===== HEADER ===== */
-      .header {
-        margin-bottom: 30px;
-      }
+        .container {
+          border: 1px solid rgba(15, 76, 129, 0.08);
+          border-radius: 0;
+          padding: 16px;
+          background: linear-gradient(180deg, ${accent}10 0%, #ffffff 18%);
+          box-sizing: border-box;
+          min-height: 100vh;
+        }
 
-      .title {
-        font-size: 26px;
-        font-weight: 700;
-        color: #1d4f7a;
-      }
+        .header {
+          display: flex;
+          justify-content: space-between;
+          gap: 24px;
+          margin-bottom: 28px;
+        }
 
-      .info {
-        margin-top: 6px;
-        color: #334155;
-      }
+        .logo-wrap img,
+        .logo-fallback {
+          width: 124px;
+          height: 88px;
+          object-fit: contain;
+          border-radius: 16px;
+          border: 1px solid rgba(15, 76, 129, 0.12);
+          padding: 8px;
+          box-sizing: border-box;
+        }
 
-      /* ===== PARTY GRID ===== */
-      .party-grid {
-        display: flex;
-        gap: 25px;
-        margin: 30px 0;
-      }
+        .logo-fallback {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: ${accent};
+          font-weight: 700;
+        }
 
-      .party-card {
-        flex: 1;
-        border: 1px solid #e5e7eb;
-        border-radius: 8px;
-        padding: 16px;
-        background: #fafafa;
-      }
+        .meta {
+          width: 360px;
+          margin-left: auto;
+        }
 
-      .party-card h4 {
-        margin-bottom: 8px;
-        color: #1d4f7a;
-        font-size: 15px;
-      }
+        .title {
+          font-family: "${headingFont}", "Segoe UI", Arial, sans-serif;
+          font-size: ${headingFontSize + 10}px;
+          font-weight: 700;
+          color: #10233e;
+          margin: 0 0 12px;
+          text-align: right;
+        }
 
-      .party-card p {
-        margin: 2px 0;
-        line-height: 1.4;
-      }
+        .meta-row {
+          display: flex;
+          justify-content: space-between;
+          gap: 18px;
+          padding: 8px 0;
+          border-bottom: 1px solid rgba(15, 76, 129, 0.08);
+        }
 
-      /* ===== TABLE ===== */
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 15px;
-      }
+        .meta-row span {
+          color: #64748b;
+          font-size: 12px;
+        }
 
-      th {
-        background: #1d4f7a;
-        color: white;
-        padding: 10px 8px;
-        text-align: left;
-        font-size: 13px;
-      }
+        .meta-row strong {
+          font-size: 13px;
+        }
 
-      td {
-        border: 1px solid #e5e7eb; /* only bottom border */
-        padding: 9px 8px;
-        font-size: 13px;
-      }
+        .party-grid {
+          display: flex;
+          gap: 18px;
+          margin: 24px 0;
+        }
 
-      tr:nth-child(even) td {
-        background: #f8fafc;
-      }
+        .party-card {
+          flex: 1;
+          border: 1px solid rgba(15, 76, 129, 0.12);
+          border-radius: 6px;
+          padding: 16px;
+          background: #fff;
+        }
 
-      .center {
-        text-align: center;
-      }
+        .party-card h4 {
+          margin: 0 0 10px;
+          color: #fff;
+          background: ${accent};
+          padding: 10px 12px;
+          border-radius: 4px;
+          font-family: "${headingFont}", "Segoe UI", Arial, sans-serif;
+          font-size: ${headingFontSize - 4}px;
+        }
 
-      .right {
-        text-align: right;
-      }
+        .party-card p {
+          margin: 5px 0;
+          line-height: 1.45;
+        }
 
-      /* ===== SUMMARY ===== */
-      .summary {
-        margin-top: 35px; /* more gap from table */
-        width: 260px;
-        margin-left: auto;
-      }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 15px;
+          overflow: hidden;
+          border-radius: 16px;
+        }
 
-      .summary-row {
-        display: flex;
-        justify-content: space-between;
-        padding: 7px 0;
-        font-size: 14px;
-      }
+        th {
+          background: ${accent};
+          color: white;
+          padding: 12px 10px;
+          text-align: left;
+          font-size: 13px;
+        }
 
-      .summary-row.total {
-        border-top: 2px solid #111;
-        margin-top: 10px;
-        padding-top: 12px;
-        font-weight: 700;
-        font-size: 16px;
-      }
+        td {
+          border-bottom: 1px solid rgba(15, 76, 129, 0.08);
+          padding: 10px;
+          font-size: 13px;
+        }
 
+        tbody tr:nth-child(even) td {
+          background: ${accent}08;
+        }
 
-      /* ===== FOOTER SPACE ===== */
-      .spacer {
-        height: 20px;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container">
+        .center {
+          text-align: center;
+        }
 
-      <div class="header">
-        <div class="title">Quotation</div>
-        <div class="info">No: ${quote.quoteNo}</div>
-        <div class="info">Date: ${quote.quoteDate}</div>
-      </div>
+        .right {
+          text-align: right;
+        }
 
-      <div class="party-grid">
-        <div class="party-card">
-          <h4>Your Details</h4>
-          <p><strong>${escapeHtml(p.company.name)}</strong></p>
-          <p>${escapeHtml(p.company.address || "")}</p>
-          <p>${escapeHtml(p.company.city || "")}, ${escapeHtml(p.company.state || "")}</p>
-          <p>${escapeHtml(p.company.phone || "")}</p>
+        .bottom {
+          display: flex;
+          gap: 18px;
+          margin-top: 24px;
+        }
+
+        .left-stack {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .panel,
+        .summary,
+        .additional,
+        .signature {
+          border: 1px solid rgba(15, 76, 129, 0.12);
+          border-radius: 8px;
+          padding: 14px;
+          background: #fff;
+        }
+
+        .panel h5,
+        .additional h5 {
+          margin: 0 0 8px;
+          color: #17304f;
+          font-size: 13px;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
+        .panel p {
+          margin: 4px 0;
+          color: #475569;
+          font-size: 12px;
+        }
+
+        .summary {
+          width: 260px;
+          margin-left: auto;
+          background: ${accent}08;
+        }
+
+        .summary-row {
+          display: flex;
+          justify-content: space-between;
+          padding: 7px 0;
+        }
+
+        .summary-row.total {
+          border-top: 2px solid #111827;
+          margin-top: 10px;
+          padding-top: 10px;
+          font-weight: 700;
+          font-size: 16px;
+        }
+
+        .words {
+          margin-top: 12px;
+          padding-top: 10px;
+          border-top: 1px dashed rgba(15, 76, 129, 0.14);
+        }
+
+        .words span {
+          display: block;
+          font-size: 11px;
+          color: #64748b;
+          text-transform: uppercase;
+        }
+
+        .words strong {
+          font-size: 12px;
+          line-height: 1.5;
+        }
+
+        .footer {
+          display: flex;
+          gap: 16px;
+          margin-top: 18px;
+        }
+
+        .additional {
+          flex: 1;
+        }
+
+        .field-pair {
+          display: flex;
+          justify-content: space-between;
+          gap: 14px;
+          padding: 5px 0;
+        }
+
+        .field-pair span {
+          color: #64748b;
+          font-size: 12px;
+        }
+
+        .field-pair strong {
+          font-size: 12px;
+        }
+
+        .signature {
+          width: 190px;
+          text-align: center;
+        }
+
+        .signature span {
+          display: block;
+          font-size: 11px;
+          color: #64748b;
+          text-transform: uppercase;
+          margin-bottom: 8px;
+        }
+
+        .signature img {
+          width: 120px;
+          height: 64px;
+          object-fit: contain;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div class="logo-wrap">
+            ${
+              companyLogo
+                ? `<img src="${companyLogo}" alt="Company logo" />`
+                : `<div class="logo-fallback">Logo</div>`
+            }
+          </div>
+
+          <div class="meta">
+            <h1 class="title">${escapeHtml(quote.quoteName || "Quotation")}</h1>
+            <div class="meta-row"><span>Quotation No</span><strong>${escapeHtml(quote.quoteNo)}</strong></div>
+            <div class="meta-row"><span>Quotation Date</span><strong>${escapeHtml(String(quote.quoteDate))}</strong></div>
+            ${
+              p.meta?.validUntil
+                ? `<div class="meta-row"><span>Valid Till Date</span><strong>${escapeHtml(p.meta.validUntil)}</strong></div>`
+                : ""
+            }
+            ${headerFields}
+          </div>
         </div>
 
-        <div class="party-card">
-          <h4>Client Details</h4>
-          <p><strong>${escapeHtml(p.client.name)}</strong></p>
-          <p>${escapeHtml(p.client.address || "")}</p>
-          <p>${escapeHtml(p.client.city || "")}, ${escapeHtml(p.client.state || "")}</p>
-          <p>${escapeHtml(p.client.phone || "")}</p>
+        <div class="party-grid">
+          <div class="party-card">
+            <h4>Your Details</h4>
+            <p><strong>${escapeHtml(p.company?.name || "")}</strong></p>
+            <p>Country: ${escapeHtml(p.company?.country || "-")}</p>
+            <p>Phone: ${escapeHtml(p.company?.phone || "-")}</p>
+            <p>GSTIN: ${escapeHtml(p.company?.gstin || "-")}</p>
+            <p>Address: ${escapeHtml(p.company?.address || "-")}</p>
+            <p>City: ${escapeHtml(p.company?.city || "-")} | State: ${escapeHtml(p.company?.state || "-")}</p>
+          </div>
+
+          <div class="party-card">
+            <h4>Client Details</h4>
+            <p><strong>${escapeHtml(p.client?.name || "")}</strong></p>
+            <p>Country: ${escapeHtml(p.client?.country || "-")}</p>
+            <p>Phone: ${escapeHtml(p.client?.phone || "-")}</p>
+            <p>GSTIN: ${escapeHtml(p.client?.gstin || "-")}</p>
+            <p>Address: ${escapeHtml(p.client?.address || "-")}</p>
+            <p>City: ${escapeHtml(p.client?.city || "-")} | State: ${escapeHtml(p.client?.state || "-")}</p>
+          </div>
         </div>
-      </div>
 
-      <table>
-        <thead>
-          <tr>
-            <th style="width:50px;">Sr.</th>
-            <th>Item</th>
-            <th style="width:80px;">Qty</th>
-            <th style="width:90px;">Unit</th>
-            <th style="width:100px;">Rate</th>
-            <th style="width:120px;">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows}
-        </tbody>
-      </table>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:50px;">Sr.</th>
+              <th>Item</th>
+              <th style="width:80px;">Qty</th>
+              <th style="width:90px;">Unit</th>
+              <th style="width:110px;">Rate</th>
+              <th style="width:120px;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
 
-      <div class="summary">
-        <div class="summary-row">
-          <span>Sub Total</span>
-          <span>₹ ${p.subTotal}</span>
+        <div class="bottom">
+          <div class="left-stack">
+            ${
+              p.taxConfig
+                ? `
+              <div class="panel">
+                <h5>Tax Configuration</h5>
+                <p>Tax Type: ${escapeHtml(p.taxConfig.taxType || "-")}</p>
+                <p>Place of Supply: ${escapeHtml(p.taxConfig.placeOfSupply || "-")}</p>
+                <p>GST Type: ${p.taxConfig.gstMode === "cgst_sgst" ? "CGST & SGST" : "IGST"}</p>
+                <p>Reverse Charge: ${p.taxConfig.reverseCharge ? "Applicable" : "No"}</p>
+              </div>`
+                : ""
+            }
+            ${
+              p.notes
+                ? `<div class="panel"><h5>Notes</h5><p>${escapeHtml(p.notes)}</p></div>`
+                : ""
+            }
+            ${
+              p.terms
+                ? `<div class="panel"><h5>Terms & Conditions</h5><p>${escapeHtml(p.terms)}</p></div>`
+                : ""
+            }
+          </div>
+
+          <div class="summary">
+            <div class="summary-row"><span>Sub Total</span><span>Rs. ${p.subTotal}</span></div>
+            ${
+              p.gst
+                ? `<div class="summary-row"><span>GST (${p.gst.percentage}%)</span><span>Rs. ${p.gst.amount}</span></div>`
+                : ""
+            }
+            <div class="summary-row total"><span>Total</span><span>Rs. ${p.grandTotal}</span></div>
+            ${
+              p.meta?.showTotalInWords
+                ? `<div class="words"><span>Total In Words</span><strong>${escapeHtml(totalInWords)}</strong></div>`
+                : ""
+            }
+          </div>
         </div>
 
         ${
-          p.gst
+          additionalFields || signature
             ? `
-          <div class="summary-row">
-            <span>GST (${p.gst.percentage}%)</span>
-            <span>₹ ${p.gst.amount}</span>
-          </div>
-        `
+          <div class="footer">
+            ${
+              additionalFields
+                ? `<div class="additional"><h5>Additional Info</h5>${additionalFields}</div>`
+                : ""
+            }
+            ${
+              signature
+                ? `<div class="signature"><span>Authorized Signature</span><img src="${signature}" alt="Signature" /></div>`
+                : ""
+            }
+          </div>`
             : ""
         }
-
-        <div class="summary-row total">
-          <span>Total</span>
-          <span>₹ ${p.grandTotal}</span>
-        </div>
       </div>
-
-       <div class="spacer"></div>
-    </div>
-  </body>
+    </body>
   </html>
   `;
 }
 
-function escapeHtml(s: string) {
-  return String(s)
+function escapeHtml(value: string) {
+  return String(value)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
-
-// const resp = await api.get(`/quotes/${quoteId}/download`, { responseType: "blob" });
-// const url = window.URL.createObjectURL(new Blob([resp.data], { type: "application/pdf" }));
-// const a = document.createElement("a");
-// a.href = url;
-// a.download = `quote-${quoteId}.pdf`;
-// document.body.appendChild(a);
-// a.click();
-// a.remove();
-// URL.revokeObjectURL(url);
