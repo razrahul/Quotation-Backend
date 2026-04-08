@@ -1,4 +1,5 @@
 import { Quote } from "../models/quote.model";
+import QuoteAsset from "../models/quoteAsset.model";
 import { QuotePayload } from "../types/quotePayload";
 
 export function calculateTotals(payload: QuotePayload) {
@@ -134,4 +135,33 @@ export async function updateQuoteById({
   await quote.reload();
 
   return quote;
+}
+
+export async function syncQuoteAssets(quote: Quote, payload: QuotePayload) {
+  await QuoteAsset.destroy({ where: { quoteId: quote.id } });
+
+  const assetEntries = [
+    { kind: "logo" as const, asset: payload.companyLogo },
+    { kind: "signature" as const, asset: payload.signature },
+  ].filter((entry) => entry.asset?.url || entry.asset?.dataUrl);
+
+  await quote.update({ payload: { ...quote.payload, ...payload } as QuotePayload });
+
+  if (assetEntries.length) {
+    await QuoteAsset.bulkCreate(
+      assetEntries.map(({ kind, asset }) => ({
+        quoteId: quote.id,
+        kind,
+        provider: asset?.provider || "inline",
+        url: asset?.url || asset?.dataUrl || "",
+        publicId: asset?.publicId || null,
+        metadata: asset
+          ? {
+              name: asset.name,
+              hasInlineData: Boolean(asset.dataUrl),
+            }
+          : null,
+      }))
+    );
+  }
 }

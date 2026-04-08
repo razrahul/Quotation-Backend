@@ -7,6 +7,7 @@ import {
 } from "../services/pdf.service";
 import {
   buildQuoteValues,
+  syncQuoteAssets,
   updateQuoteById,
   validateQuoteInput,
 } from "../services/quote.service";
@@ -34,6 +35,7 @@ export async function createQuote(req: Request, res: Response) {
         payload: payload as QuotePayload,
       })
     );
+    await syncQuoteAssets(quote, payload as QuotePayload);
 
     return success(res, "Quote created", quote, 201);
   } catch (err: any) {
@@ -181,6 +183,7 @@ export async function updateQuote(req: AuthRequest, res: Response) {
       quoteDate,
       payload: payload as QuotePayload,
     });
+    await syncQuoteAssets(updatedQuote, payload as QuotePayload);
 
     return success(res, "Quote updated", updatedQuote);
   } catch (err: any) {
@@ -217,6 +220,7 @@ export async function finalizeQuote(req: AuthRequest, res: Response) {
         userId: req.userId,
       })
     );
+    await syncQuoteAssets(quote, payload as QuotePayload);
 
     const html = await renderQuoteHtml(quote);
     const pdfBuffer = await generatePdfBufferFromHtml(html);
