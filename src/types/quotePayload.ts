@@ -43,6 +43,7 @@ export interface QuoteAssetPayload {
   dataUrl?: string;
   provider?: string;
   publicId?: string;
+  public_id?: string;
 }
 
 export interface QuoteFieldPayload {

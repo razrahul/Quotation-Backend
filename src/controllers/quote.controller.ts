@@ -15,12 +15,39 @@ import DownloadLog from "../models/download.model";
 import { success, error } from "../utils/response";
 import { QuotePayload } from "../types/quotePayload";
 
+function parseQuotePayload(rawPayload: unknown): QuotePayload | undefined {
+  if (!rawPayload) {
+    return undefined;
+  }
+
+  if (typeof rawPayload === "string") {
+    return JSON.parse(rawPayload) as QuotePayload;
+  }
+
+  return rawPayload as QuotePayload;
+}
+
+function getQuoteFiles(req: Request) {
+  const files = req.files as
+    | {
+        companyLogo?: Express.Multer.File[];
+        signature?: Express.Multer.File[];
+      }
+    | undefined;
+
+  return {
+    companyLogo: files?.companyLogo,
+    signature: files?.signature,
+  };
+}
+
 /* ===============================
    Create Public Quote (Guest)
 ================================ */
 export async function createQuote(req: Request, res: Response) {
   try {
-    const { quoteName, quoteNo, quoteDate, payload } = req.body;
+    const { quoteName, quoteNo, quoteDate } = req.body;
+    const payload = parseQuotePayload(req.body.payload);
     const validationError = validateQuoteInput({ quoteNo, quoteDate, payload });
 
     if (validationError) {
@@ -35,7 +62,7 @@ export async function createQuote(req: Request, res: Response) {
         payload: payload as QuotePayload,
       })
     );
-    await syncQuoteAssets(quote, payload as QuotePayload);
+    await syncQuoteAssets(quote, payload as QuotePayload, getQuoteFiles(req));
 
     return success(res, "Quote created", quote, 201);
   } catch (err: any) {
@@ -160,7 +187,8 @@ export async function updateQuote(req: AuthRequest, res: Response) {
       return error(res, "This quote does not belong to you", 403);
     }
 
-    const { quoteName, quoteNo, quoteDate, payload } = req.body;
+    const { quoteName, quoteNo, quoteDate } = req.body;
+    const payload = parseQuotePayload(req.body.payload);
     const validationError = validateQuoteInput({
       quoteNo,
       quoteDate,
@@ -183,7 +211,7 @@ export async function updateQuote(req: AuthRequest, res: Response) {
       quoteDate,
       payload: payload as QuotePayload,
     });
-    await syncQuoteAssets(updatedQuote, payload as QuotePayload);
+    await syncQuoteAssets(updatedQuote, payload as QuotePayload, getQuoteFiles(req));
 
     return success(res, "Quote updated", updatedQuote);
   } catch (err: any) {
@@ -198,7 +226,8 @@ export async function finalizeQuote(req: AuthRequest, res: Response) {
   try {
     if (!req.userId) return error(res, "Login required", 401);
 
-    const { quoteName, quoteNo, quoteDate, payload } = req.body;
+    const { quoteName, quoteNo, quoteDate } = req.body;
+    const payload = parseQuotePayload(req.body.payload);
     const validationError = validateQuoteInput({
       quoteNo,
       quoteDate,
@@ -220,7 +249,7 @@ export async function finalizeQuote(req: AuthRequest, res: Response) {
         userId: req.userId,
       })
     );
-    await syncQuoteAssets(quote, payload as QuotePayload);
+    await syncQuoteAssets(quote, payload as QuotePayload, getQuoteFiles(req));
 
     const html = await renderQuoteHtml(quote);
     const pdfBuffer = await generatePdfBufferFromHtml(html);
