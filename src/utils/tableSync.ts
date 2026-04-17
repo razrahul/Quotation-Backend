@@ -12,7 +12,7 @@ export async function tableSync() {
     await User.sync({ force: false }); //alter: true for new change in model
     await Quote.sync({ force: false }); //alter: true
     await DownloadLog.sync({ force: false }); //alter: true
-    await QuoteAsset.sync({ force: false }); //alter: true
+    await QuoteAsset.sync({ force: false }); // apply asset schema changes
   } catch (err: any) {
     console.error("[tableSync] error:", err.message || err);
     throw err;

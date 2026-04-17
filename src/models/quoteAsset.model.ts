@@ -7,14 +7,14 @@ export interface QuoteAssetAttributes {
   kind: "logo" | "signature";
   provider: string;
   url: string;
-  publicId?: string | null;
+  publicId: string;
   metadata?: Record<string, any> | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
 
 export interface QuoteAssetCreationAttributes
-  extends Optional<QuoteAssetAttributes, "id" | "publicId" | "metadata" | "createdAt" | "updatedAt"> {}
+  extends Optional<QuoteAssetAttributes, "id" | "metadata" | "createdAt" | "updatedAt"> {}
 
 export class QuoteAsset
   extends Model<QuoteAssetAttributes, QuoteAssetCreationAttributes>
@@ -25,7 +25,7 @@ export class QuoteAsset
   public kind!: "logo" | "signature";
   public provider!: string;
   public url!: string;
-  public publicId!: string | null;
+  public publicId!: string;
   public metadata!: Record<string, any> | null;
 
   public readonly createdAt!: Date;
@@ -63,7 +63,7 @@ QuoteAsset.init(
     },
     publicId: {
       type: DataTypes.STRING(255),
-      allowNull: true,
+      allowNull: false,
     },
     metadata: {
       type: DataTypes.JSON,

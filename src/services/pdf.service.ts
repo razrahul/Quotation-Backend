@@ -1,3 +1,4 @@
+import { existsSync } from "fs";
 import * as puppeteer from "puppeteer";
 
 const DEFAULT_ARGS = [
@@ -6,14 +7,49 @@ const DEFAULT_ARGS = [
   "--disable-dev-shm-usage",
 ];
 
+function resolveChromeExecutablePath(): string | undefined {
+  const configuredPath =
+    process.env.PUPPETEER_EXECUTABLE_PATH ||
+    process.env.CHROME_BIN ||
+    process.env.GOOGLE_CHROME_BIN;
+
+  if (configuredPath && existsSync(configuredPath)) {
+    return configuredPath;
+  }
+
+  try {
+    const bundledPath = puppeteer.executablePath();
+    if (bundledPath && existsSync(bundledPath)) {
+      return bundledPath;
+    }
+  } catch (_) {}
+
+  const fallbackPaths = [
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/chromium",
+    "/snap/bin/chromium",
+  ];
+
+  return fallbackPaths.find((candidatePath) => existsSync(candidatePath));
+}
+
 export async function generatePdfBufferFromHtml(html: string): Promise<Buffer> {
   let browser: puppeteer.Browser | null = null;
 
   try {
+    const executablePath = resolveChromeExecutablePath();
+
     browser = await puppeteer.launch({
       headless: true,
       args: DEFAULT_ARGS,
       timeout: 60000,
+      ...(executablePath ? { executablePath } : {}),
     });
 
     const page = await browser.newPage();

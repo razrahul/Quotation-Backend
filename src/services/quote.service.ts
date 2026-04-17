@@ -1,6 +1,33 @@
 import { Quote } from "../models/quote.model";
 import QuoteAsset from "../models/quoteAsset.model";
 import { QuotePayload } from "../types/quotePayload";
+const {
+  uploadQuoteAssetToCloudinary,
+  deleteCloudinaryAsset,
+} = require("./cloudinary.service");
+
+type UploadedQuoteFiles = {
+  companyLogo?: Express.Multer.File[];
+  signature?: Express.Multer.File[];
+};
+
+function normalizeAssetPayload(
+  asset?: QuotePayload["companyLogo"] | QuotePayload["signature"] | null
+) {
+  if (!asset?.url || !(asset.publicId || asset.public_id)) {
+    return null;
+  }
+
+  const publicId = asset.publicId || asset.public_id;
+
+  return {
+    name: asset.name || "asset",
+    url: asset.url,
+    provider: asset.provider || "cloudinary",
+    publicId,
+    public_id: publicId,
+  };
+}
 
 export function calculateTotals(payload: QuotePayload) {
   const subTotal = payload.items.reduce((sum, item) => sum + item.qty * item.rate, 0);
@@ -137,28 +164,90 @@ export async function updateQuoteById({
   return quote;
 }
 
-export async function syncQuoteAssets(quote: Quote, payload: QuotePayload) {
+export async function syncQuoteAssets(
+  quote: Quote,
+  payload: QuotePayload,
+  files?: UploadedQuoteFiles
+) {
+  const existingAssets = await QuoteAsset.findAll({ where: { quoteId: quote.id } });
+  const existingByKind = new Map(existingAssets.map((asset) => [asset.kind, asset]));
+
+  const nextCompanyLogo = normalizeAssetPayload(payload.companyLogo);
+  const nextSignature = normalizeAssetPayload(payload.signature);
+
+  const companyLogoFile = files?.companyLogo?.[0];
+  const signatureFile = files?.signature?.[0];
+
+  const uploadedLogo = companyLogoFile
+    ? await uploadQuoteAssetToCloudinary(companyLogoFile, "company-logo")
+    : null;
+  const uploadedSignature = signatureFile
+    ? await uploadQuoteAssetToCloudinary(signatureFile, "signature")
+    : null;
+
+  const finalAssets = {
+    companyLogo: uploadedLogo
+      ? {
+          name: companyLogoFile?.originalname || payload.companyLogo?.name || "company-logo",
+          url: uploadedLogo.url,
+          provider: uploadedLogo.provider,
+          publicId: uploadedLogo.publicId,
+          public_id: uploadedLogo.publicId,
+        }
+      : nextCompanyLogo,
+    signature: uploadedSignature
+      ? {
+          name: signatureFile?.originalname || payload.signature?.name || "signature",
+          url: uploadedSignature.url,
+          provider: uploadedSignature.provider,
+          publicId: uploadedSignature.publicId,
+          public_id: uploadedSignature.publicId,
+        }
+      : nextSignature,
+  };
+
+  const assetsToDelete = [
+    { kind: "logo" as const, existing: existingByKind.get("logo"), next: finalAssets.companyLogo },
+    {
+      kind: "signature" as const,
+      existing: existingByKind.get("signature"),
+      next: finalAssets.signature,
+    },
+  ].filter(
+    ({ existing, next }) =>
+      existing?.publicId && (!next || next.publicId !== existing.publicId)
+  );
+
   await QuoteAsset.destroy({ where: { quoteId: quote.id } });
 
-  const assetEntries = [
-    { kind: "logo" as const, asset: payload.companyLogo },
-    { kind: "signature" as const, asset: payload.signature },
-  ].filter((entry) => entry.asset?.url || entry.asset?.dataUrl);
+  for (const asset of assetsToDelete) {
+    await deleteCloudinaryAsset(asset.existing?.publicId);
+  }
 
-  await quote.update({ payload: { ...quote.payload, ...payload } as QuotePayload });
+  const assetEntries = [
+    { kind: "logo" as const, asset: finalAssets.companyLogo },
+    { kind: "signature" as const, asset: finalAssets.signature },
+  ].filter((entry) => entry.asset?.url && entry.asset?.publicId);
+
+  const nextPayload = {
+    ...payload,
+    companyLogo: finalAssets.companyLogo,
+    signature: finalAssets.signature,
+  } as QuotePayload;
+
+  await quote.update({ payload: { ...quote.payload, ...nextPayload } as QuotePayload });
 
   if (assetEntries.length) {
     await QuoteAsset.bulkCreate(
       assetEntries.map(({ kind, asset }) => ({
         quoteId: quote.id,
         kind,
-        provider: asset?.provider || "inline",
-        url: asset?.url || asset?.dataUrl || "",
-        publicId: asset?.publicId || null,
+        provider: asset?.provider || "cloudinary",
+        url: asset?.url || "",
+        publicId: asset?.publicId || asset?.public_id || "",
         metadata: asset
           ? {
               name: asset.name,
-              hasInlineData: Boolean(asset.dataUrl),
             }
           : null,
       }))
