@@ -296,11 +296,12 @@ export function renderQuoteHtml(quote: any) {
           background: ${accent};
           color: white;
           padding: 12px 10px;
-          text-align: left;
+          text-align: center;
           font-size: 13px;
         }
 
         td {
+          text-align: center;
           border-bottom: 1px solid rgba(15, 76, 129, 0.08);
           padding: 10px;
           font-size: 13px;
@@ -315,7 +316,7 @@ export function renderQuoteHtml(quote: any) {
         }
 
         .right {
-          text-align: right;
+          text-align: center;
         }
 
         .bottom {

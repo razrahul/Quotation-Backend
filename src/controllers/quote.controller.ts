@@ -44,12 +44,14 @@ function getQuoteFiles(req: Request) {
 /* ===============================
    Create Public Quote (Guest)
 ================================ */
-export async function createQuote(req: Request, res: Response) {
+export async function createQuote(req: AuthRequest, res: Response) {
   try {
+    if(!req.userId) return error(res, "Login required", 401);
+
     const { quoteName, quoteNo, quoteDate } = req.body;
     const payload = parseQuotePayload(req.body.payload);
     const validationError = validateQuoteInput({ quoteNo, quoteDate, payload });
-
+    //here company details and client details are not mandatory as user may just want to preview the quote without filling those details. Hence not passing requirePartyDetails flag
     if (validationError) {
       return error(res, validationError, 400);
     }
@@ -60,6 +62,8 @@ export async function createQuote(req: Request, res: Response) {
         quoteNo,
         quoteDate,
         payload: payload as QuotePayload,
+        status: "FINAL",
+        userId: req.userId,
       })
     );
     await syncQuoteAssets(quote, payload as QuotePayload, getQuoteFiles(req));

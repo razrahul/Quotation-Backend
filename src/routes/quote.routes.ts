@@ -14,7 +14,7 @@ import { quoteUploadFields } from "../middleware/upload.middleware";
 
 const router = Router();
 
-router.post("/", quoteUploadFields, createQuote);             // create/preview public
+router.post("/",requireAuth, quoteUploadFields, createQuote);             // create/preview public
 router.get("/:id", getQuote);              // preview
 router.post("/:id/save", requireAuth, saveQuoteForUser); // attach to user
 router.get("/:id/download", requireAuth, downloadQuote); // protected download
