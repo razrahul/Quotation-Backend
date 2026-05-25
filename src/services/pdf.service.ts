@@ -138,12 +138,12 @@ export function renderQuoteHtml(quote: any) {
     .map(
       (item: any, index: number) => `
       <tr>
-        <td class="center">${index + 1}</td>
+        <td>${index + 1}</td>
         <td>${escapeHtml(item.name)}</td>
-        <td class="center">${item.qty}</td>
-        <td class="center">${escapeHtml(item.unit || "")}</td>
-        <td class="right">Rs. ${item.rate}</td>
-        <td class="right">Rs. ${item.amount}</td>
+        <td>${item.qty}</td>
+        <td>${escapeHtml(item.unit || "")}</td>
+        <td>Rs. ${item.rate}</td>
+        <td>Rs. ${item.amount}</td>
       </tr>`
     )
     .join("");
@@ -286,29 +286,38 @@ export function renderQuoteHtml(quote: any) {
 
         table {
           width: 100%;
-          border-collapse: collapse;
+          border-collapse: separate;
+          border-spacing: 0;
           margin-top: 15px;
           overflow: hidden;
-          border-radius: 16px;
+          border-radius: 12px;
+          background: #ffffff;
+          box-shadow: 0 0 0 1px rgba(15, 76, 129, 0.08);
         }
 
         th {
           background: ${accent};
           color: white;
-          padding: 12px 10px;
-          text-align: center;
+          padding: 13px 14px;
+          text-align: left;
           font-size: 13px;
+          font-weight: 700;
         }
 
         td {
-          text-align: center;
+          text-align: left;
           border-bottom: 1px solid rgba(15, 76, 129, 0.08);
-          padding: 10px;
+          padding: 12px 14px;
           font-size: 13px;
+          vertical-align: middle;
         }
 
         tbody tr:nth-child(even) td {
           background: ${accent}08;
+        }
+
+        tbody tr:last-child td {
+          border-bottom: 0;
         }
 
         .center {
@@ -316,7 +325,7 @@ export function renderQuoteHtml(quote: any) {
         }
 
         .right {
-          text-align: center;
+          text-align: right;
         }
 
         .bottom {
@@ -490,12 +499,12 @@ export function renderQuoteHtml(quote: any) {
         <table>
           <thead>
             <tr>
-              <th style="width:50px;">Sr.</th>
+              <th style="width:54px;">Sr.</th>
               <th>Item</th>
               <th style="width:80px;">Qty</th>
-              <th style="width:90px;">Unit</th>
-              <th style="width:110px;">Rate</th>
-              <th style="width:120px;">Amount</th>
+              <th style="width:105px;">Unit</th>
+              <th style="width:125px;">Rate</th>
+              <th style="width:130px;">Amount</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
